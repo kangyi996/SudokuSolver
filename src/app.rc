@@ -1,0 +1,4 @@
+#include <winuser.h>
+#define IDI_MAIN_ICON 101
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "app.manifest"
+IDI_MAIN_ICON ICON "sudoku.ico"

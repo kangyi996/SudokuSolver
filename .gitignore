@@ -1,0 +1,8 @@
+build/
+*.exe
+*.obj
+*.o
+.claude/
+nul
+*.autosave.txt
+*.stats.txt
