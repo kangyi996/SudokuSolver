@@ -10,7 +10,7 @@ add_executable(sudoku_solver
     # Core
     src/core/board.cpp
     src/core/solver.cpp
-    src/core/puzzle_loader.cpp
+
     src/core/generator.cpp
     # ImGui core
     third_party/imgui/imgui.cpp
