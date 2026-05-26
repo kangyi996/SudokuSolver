@@ -442,7 +442,9 @@ void renderUI() {
         // 键盘输入 —— 使用 setCell 确保约束表一致
         if (g.selR >= 0 && g.selC >= 0 && !g.initial.given[g.selR][g.selC]) {
             for (int vk = '1'; vk <= '9'; vk++) {
-                if (ImGui::IsKeyPressed((ImGuiKey)(ImGuiKey_0 + (vk - '0')))) {
+                ImGuiKey k1 = (ImGuiKey)(ImGuiKey_0 + (vk - '0'));
+                ImGuiKey k2 = (ImGuiKey)(ImGuiKey_Keypad0 + (vk - '0'));
+                if (ImGui::IsKeyPressed(k1) || ImGui::IsKeyPressed(k2)) {
                     int val = vk - '0';
                     g.current.setCell(g.selR, g.selC, val);
                     g.initial.setCell(g.selR, g.selC, val);
