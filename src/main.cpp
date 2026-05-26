@@ -44,6 +44,7 @@ struct AppState {
     bool showCandidates = false;
     bool conflict[9][9] = {};
     std::vector<Step> steps;
+    int lastStepCount = 0;
     char statusMsg[256] = "点击「生成新谜题」开始，或直接在棋盘上填数后求解。";
     int difficulty = 0;
 
@@ -120,6 +121,7 @@ void resetSolver() {
     g.current.rebuildConstraints(); // 修复因用户输入/擦除可能导致的约束表不一致
     g.solver = new Solver(g.current);
     g.steps.clear();
+    g.lastStepCount = 0;
 }
 
 // 扫描整个棋盘，更新冲突标记
@@ -630,8 +632,10 @@ void renderUI() {
         ImGui::BeginChild("LogArea", ImVec2(0, -10), true);
         for (auto& st : g.steps)
             ImGui::TextWrapped("%s", st.description.c_str());
-        if (!g.steps.empty())
+        if ((int)g.steps.size() > g.lastStepCount) {
             ImGui::SetScrollHereY(1.0f);
+            g.lastStepCount = (int)g.steps.size();
+        }
         ImGui::EndChild();
 
         ImGui::EndChild();
@@ -703,9 +707,9 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow) {
         if (f) {
             fclose(f);
             uiFont = io.Fonts->AddFontFromFileTTF(fp, 19.0f, nullptr,
-                io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
+                io.Fonts->GetGlyphRangesChineseFull());
             g_font = io.Fonts->AddFontFromFileTTF(fp, 48.0f, nullptr,
-                io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
+                io.Fonts->GetGlyphRangesChineseFull());
             break;
         }
     }

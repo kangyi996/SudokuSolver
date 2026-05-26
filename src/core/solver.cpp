@@ -202,7 +202,7 @@ bool Solver::backtrackStep(Step& outStep) {
         std::vector<Step> propagated;
         propagate(propagated);
         if (!propagated.empty())
-            outStep.description += " → 触发约束传播 " + std::to_string(propagated.size()) + " 步";
+            outStep.description += " -> 触发约束传播 " + std::to_string(propagated.size()) + " 步";
 
         return true;
     } else {
