@@ -23,7 +23,7 @@ typedef ptrdiff_t GLintptr;
 #include <algorithm>
 #include <cfloat>
 #include <chrono>
-#include <fstream>
+
 #include "core/board.h"
 #include "core/solver.h"
 #include "core/generator.h"
@@ -256,41 +256,7 @@ std::string formatTime(double sec) {
     return buf;
 }
 
-// ======== 自动保存 / 恢复 ========
-std::string getAutoSavePath() {
-    char buf[MAX_PATH];
-    GetModuleFileNameA(nullptr, buf, sizeof(buf));
-    std::string path(buf);
-    auto pos = path.rfind('\\');
-    if (pos != std::string::npos) path = path.substr(0, pos);
-    return path + "\\sudoku_autosave.txt";
-}
 
-void autoSave() {
-    std::ofstream f(getAutoSavePath());
-    if (!f) return;
-    f << g.initial.toString() << "\n";
-    f << g.difficulty << "\n";
-}
-
-void autoLoad() {
-    std::ifstream f(getAutoSavePath());
-    if (!f) return;
-    std::string puzzle;
-    int diff = 0;
-    if (!std::getline(f, puzzle)) return;
-    f >> diff;
-    if (puzzle.size() < 81) return;
-    Board b;
-    b.fromString(puzzle);
-    bool empty = true;
-    for (int r = 0; r < 9 && empty; r++)
-        for (int c = 0; c < 9 && empty; c++)
-            if (b.grid[r][c] != 0) empty = false;
-    if (empty) return;
-    g.difficulty = diff;
-    loadPuzzle(b, "已恢复上次未完成的谜题。");
-}
 
 // ======== 绘制棋盘 ========
 void drawBoard(ImDrawList* dl, ImVec2 org) {
@@ -453,7 +419,6 @@ void renderUI() {
                     // 不设 given——用户自己输入的数字可随时修改
                     updateConflicts();
                     resetSolver();
-                    autoSave();
                     if (g.conflict[g.selR][g.selC])
                         snprintf(g.statusMsg, sizeof(g.statusMsg),
                                  "R%dC%d = %d  ⚠ 与同行/列/宫数字冲突！",
@@ -469,7 +434,6 @@ void renderUI() {
                 g.initial.given[g.selR][g.selC] = false;
                 updateConflicts();
                 resetSolver();
-                autoSave();
                 snprintf(g.statusMsg, sizeof(g.statusMsg),
                          "R%dC%d 已擦除", g.selR + 1, g.selC + 1);
             }
@@ -532,7 +496,6 @@ void renderUI() {
             snprintf(msg, sizeof(msg), "已生成「%s」谜题，%d 个提示数。",
                      difficultyName(d), 81 - difficultyEmptyCells(d));
             loadPuzzle(b, msg);
-            autoSave();
         }
 
         ImGui::Spacing();
@@ -719,11 +682,9 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow) {
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplOpenGL3_Init("#version 130");
 
-    // 尝试恢复上次未完成谜题
-    autoLoad();
-    if (isBoardEmpty())
-        snprintf(g.statusMsg, sizeof(g.statusMsg),
-                 "欢迎！请生成谜题或直接在棋盘上填数，然后点击求解。");
+
+    snprintf(g.statusMsg, sizeof(g.statusMsg),
+             "欢迎！请生成谜题或直接在棋盘上填数，然后点击求解。");
 
     ShowWindow(hwnd, nCmdShow);
     UpdateWindow(hwnd);

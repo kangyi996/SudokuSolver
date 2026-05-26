@@ -162,6 +162,28 @@ bool Solver::findMRVCell(int& outRow, int& outCol, std::vector<int>& outCandidat
 }
 
 bool Solver::backtrackStep(Step& outStep) {
+    // 检查当前棋盘是否还有路可走
+    // 若栈非空且棋盘相比栈顶快照有进展（无矛盾），应先推新帧往深走，
+    // 而不是回滚快照盲目尝试上一个帧的下一个候选数。
+    if (!btStack.empty()) {
+        int r, c;
+        std::vector<int> cands;
+        if (findMRVCell(r, c, cands)) {
+            if (!cands.empty()) {
+                // 当前路径可行，只是约束传播卡住了——推新帧往深走
+                BacktrackFrame frame;
+                frame.snapshot = board;
+                frame.row = r; frame.col = c;
+                frame.candidates = cands;
+                frame.triedIndex = 0;
+                btStack.push(frame);
+            }
+            // cands 为空 → 矛盾，落到下面的回溯循环
+        }
+        // findMRVCell 返回 false → 棋盘已满，落到下面（会走 else 分支弹栈）
+    }
+
+    // 初始帧
     if (btStack.empty()) {
         int r, c;
         std::vector<int> cands;
