@@ -1,5 +1,6 @@
 #include "solver.h"
 #include <algorithm>
+#include <cstring>
 #include <sstream>
 
 Solver::Solver(Board& b) : board(b) {}
@@ -162,25 +163,25 @@ bool Solver::findMRVCell(int& outRow, int& outCol, std::vector<int>& outCandidat
 }
 
 bool Solver::backtrackStep(Step& outStep) {
-    // 检查当前棋盘是否还有路可走
-    // 若栈非空且棋盘相比栈顶快照有进展（无矛盾），应先推新帧往深走，
-    // 而不是回滚快照盲目尝试上一个帧的下一个候选数。
+    // 检查当前棋盘是否还需要继续深入
+    // 关键：只有当棋盘相比栈顶快照有实际进展时才推新帧；
+    // 若棋盘刚被 pop 恢复到快照（grid 相同），不应推帧——应尝试父帧的下一个候选。
     if (!btStack.empty()) {
-        int r, c;
-        std::vector<int> cands;
-        if (findMRVCell(r, c, cands)) {
-            if (!cands.empty()) {
-                // 当前路径可行，只是约束传播卡住了——推新帧往深走
-                BacktrackFrame frame;
-                frame.snapshot = board;
-                frame.row = r; frame.col = c;
-                frame.candidates = cands;
-                frame.triedIndex = 0;
-                btStack.push(frame);
+        BacktrackFrame& topCheck = btStack.top();
+        if (memcmp(&board.grid, &topCheck.snapshot.grid, sizeof(board.grid)) != 0) {
+            int r, c;
+            std::vector<int> cands;
+            if (findMRVCell(r, c, cands)) {
+                if (!cands.empty()) {
+                    BacktrackFrame frame;
+                    frame.snapshot = board;
+                    frame.row = r; frame.col = c;
+                    frame.candidates = cands;
+                    frame.triedIndex = 0;
+                    btStack.push(frame);
+                }
             }
-            // cands 为空 → 矛盾，落到下面的回溯循环
         }
-        // findMRVCell 返回 false → 棋盘已满，落到下面（会走 else 分支弹栈）
     }
 
     // 初始帧
@@ -229,7 +230,6 @@ bool Solver::backtrackStep(Step& outStep) {
         return true;
     } else {
         outStep.type = StepType::BACKTRACK_FAIL;
-        board = top.snapshot;
         std::ostringstream oss;
         oss << "R" << (top.row+1) << "C" << (top.col+1)
             << " 回溯，深度 " << (btStack.size() - 1);
@@ -239,6 +239,9 @@ bool Solver::backtrackStep(Step& outStep) {
             outStep.description += " — 该谜题无解！";
             return false;
         }
+        // 恢复到父帧快照，保证递归进入后 memcmp 相等，跳过推新帧，
+        // 直接尝试父帧的下一个候选数，而不是在同一个位置反复推新帧循环。
+        board = btStack.top().snapshot;
         return backtrackStep(outStep);
     }
 }
