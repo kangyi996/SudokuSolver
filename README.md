@@ -27,3 +27,5 @@
 - [Dear ImGui](https://github.com/ocornut/imgui) (OpenGL3 + Win32)
 - MinGW64 (GCC 15.1.0)
 - CMake 3.28+
+
+~~游玩《川岛博士的脑部锻炼》而作~~
