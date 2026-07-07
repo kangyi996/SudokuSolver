@@ -23,6 +23,7 @@ typedef ptrdiff_t GLintptr;
 #include <algorithm>
 #include <cfloat>
 #include <chrono>
+#include <stdexcept>
 
 #include "core/board.h"
 #include "core/solver.h"
@@ -610,6 +611,11 @@ void renderUI() {
 // ======== Win32 + OpenGL 初始化 ========
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
 
+[[noreturn]] void failFast(const char* message) {
+    MessageBoxA(nullptr, message, "Sudoku Solver", MB_OK | MB_ICONERROR);
+    throw std::runtime_error(message);
+}
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wp, lp)) return true;
     switch (msg) {
@@ -625,106 +631,139 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow) {
-    // 窗口
-    WNDCLASSEXW wc = {sizeof(wc), CS_OWNDC, WndProc, 0, 0, hInst,
-                      LoadIcon(hInst, MAKEINTRESOURCE(101)),
-                      nullptr, nullptr, nullptr, L"SudokuImGui", nullptr};
-    RegisterClassExW(&wc);
+    HWND hwnd = nullptr;
+    HDC hdc = nullptr;
+    HGLRC hglrc = nullptr;
+    bool imguiWin32Inited = false;
+    bool imguiOpenGLInited = false;
+    bool imguiContextCreated = false;
 
-    RECT wr = {0, 0, 1150, 720};
-    AdjustWindowRect(&wr, WS_OVERLAPPEDWINDOW, FALSE);
-    HWND hwnd = CreateWindowW(wc.lpszClassName, L"数独求解器",
-        WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
-        wr.right - wr.left, wr.bottom - wr.top,
-        nullptr, nullptr, hInst, nullptr);
+    try {
+        // 窗口
+        WNDCLASSEXW wc = {sizeof(wc), CS_OWNDC, WndProc, 0, 0, hInst,
+                          LoadIcon(hInst, MAKEINTRESOURCE(101)),
+                          nullptr, nullptr, nullptr, L"SudokuImGui", nullptr};
+        if (!RegisterClassExW(&wc))
+            failFast("窗口类注册失败。");
 
-    // OpenGL 上下文
-    HDC hdc = GetDC(hwnd);
-    PIXELFORMATDESCRIPTOR pfd = {
-        sizeof(pfd), 1, PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER,
-        PFD_TYPE_RGBA, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 8, 0, 0, 0, 0, 0};
-    SetPixelFormat(hdc, ChoosePixelFormat(hdc, &pfd), &pfd);
-    HGLRC hglrc = wglCreateContext(hdc);
-    wglMakeCurrent(hdc, hglrc);
+        RECT wr = {0, 0, 1150, 720};
+        if (!AdjustWindowRect(&wr, WS_OVERLAPPEDWINDOW, FALSE))
+            failFast("窗口大小计算失败。");
+        hwnd = CreateWindowW(wc.lpszClassName, L"数独求解器",
+            WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
+            wr.right - wr.left, wr.bottom - wr.top,
+            nullptr, nullptr, hInst, nullptr);
+        if (!hwnd)
+            failFast("窗口创建失败。");
 
-    // ImGui 初始化
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO();
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    io.IniFilename = nullptr;
+        // OpenGL 上下文
+        hdc = GetDC(hwnd);
+        if (!hdc)
+            failFast("获取窗口设备上下文失败。");
+        PIXELFORMATDESCRIPTOR pfd = {
+            sizeof(pfd), 1, PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER,
+            PFD_TYPE_RGBA, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 8, 0, 0, 0, 0, 0};
+        int pixelFormat = ChoosePixelFormat(hdc, &pfd);
+        if (pixelFormat == 0)
+            failFast("选择像素格式失败。");
+        if (!SetPixelFormat(hdc, pixelFormat, &pfd))
+            failFast("设置像素格式失败。");
+        hglrc = wglCreateContext(hdc);
+        if (!hglrc)
+            failFast("创建 OpenGL 上下文失败。");
+        if (!wglMakeCurrent(hdc, hglrc))
+            failFast("激活 OpenGL 上下文失败。");
 
-    // 风格
-    applyTheme(false);
+        // ImGui 初始化
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        imguiContextCreated = true;
+        ImGuiIO& io = ImGui::GetIO();
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        io.IniFilename = nullptr;
 
-    // 加载中文字体
-    const char* fontPaths[] = {
-        "C:\\Windows\\Fonts\\msyh.ttc",
-        "C:\\Windows\\Fonts\\msyhbd.ttc",
-        "C:\\Windows\\Fonts\\simhei.ttf",
-    };
-    // 加载中文字体——两组大小：UI 用 19px，棋盘数字用 48px（防止放大模糊）
-    ImFont* uiFont = nullptr;
-    for (const char* fp : fontPaths) {
-        FILE* f = fopen(fp, "rb");
-        if (f) {
-            fclose(f);
-            uiFont = io.Fonts->AddFontFromFileTTF(fp, 19.0f, nullptr,
-                io.Fonts->GetGlyphRangesChineseFull());
-            g_font = io.Fonts->AddFontFromFileTTF(fp, 48.0f, nullptr,
-                io.Fonts->GetGlyphRangesChineseFull());
-            break;
+        // 风格
+        applyTheme(false);
+
+        // 加载中文字体
+        const char* fontPaths[] = {
+            "C:\\Windows\\Fonts\\msyh.ttc",
+            "C:\\Windows\\Fonts\\msyhbd.ttc",
+            "C:\\Windows\\Fonts\\simhei.ttf",
+        };
+        // 加载中文字体——两组大小：UI 用 19px，棋盘数字用 48px（防止放大模糊）
+        ImFont* uiFont = nullptr;
+        for (const char* fp : fontPaths) {
+            FILE* f = fopen(fp, "rb");
+            if (f) {
+                fclose(f);
+                uiFont = io.Fonts->AddFontFromFileTTF(fp, 19.0f, nullptr,
+                    io.Fonts->GetGlyphRangesChineseFull());
+                g_font = io.Fonts->AddFontFromFileTTF(fp, 48.0f, nullptr,
+                    io.Fonts->GetGlyphRangesChineseFull());
+                break;
+            }
         }
-    }
-    if (!uiFont) { g_font = io.Fonts->AddFontDefault(); }
-    io.Fonts->Build();
-
-    ImGui_ImplWin32_Init(hwnd);
-    ImGui_ImplOpenGL3_Init("#version 130");
-
-
-    snprintf(g.statusMsg, sizeof(g.statusMsg),
-             "欢迎！请生成谜题或直接在棋盘上填数，然后点击求解。");
-
-    ShowWindow(hwnd, nCmdShow);
-    UpdateWindow(hwnd);
-
-    // 主循环
-    bool running = true;
-    while (running) {
-        MSG msg;
-        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-            if (msg.message == WM_QUIT) { running = false; break; }
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
+        if (!uiFont) {
+            ImFont* fallback = io.Fonts->AddFontDefault();
+            g_font = fallback;
         }
-        if (!running) break;
+        io.Fonts->Build();
 
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplWin32_NewFrame();
-        ImGui::NewFrame();
+        if (!ImGui_ImplWin32_Init(hwnd))
+            failFast("ImGui Win32 后端初始化失败。");
+        imguiWin32Inited = true;
+        if (!ImGui_ImplOpenGL3_Init("#version 130"))
+            failFast("ImGui OpenGL3 后端初始化失败。");
+        imguiOpenGLInited = true;
 
-        renderUI();
+        snprintf(g.statusMsg, sizeof(g.statusMsg),
+                 "欢迎！请生成谜题或直接在棋盘上填数，然后点击求解。");
 
-        ImGui::Render();
-        RECT rc; GetClientRect(hwnd, &rc);
-        glViewport(0, 0, rc.right - rc.left, rc.bottom - rc.top);
-        glClearColor(g.darkMode ? 0.08f : 0.95f,
-                     g.darkMode ? 0.08f : 0.95f,
-                     g.darkMode ? 0.10f : 0.97f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        SwapBuffers(hdc);
+        ShowWindow(hwnd, nCmdShow);
+        UpdateWindow(hwnd);
+
+        // 主循环
+        bool running = true;
+        while (running) {
+            MSG msg;
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                if (msg.message == WM_QUIT) { running = false; break; }
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+            if (!running) break;
+
+            ImGui_ImplOpenGL3_NewFrame();
+            ImGui_ImplWin32_NewFrame();
+            ImGui::NewFrame();
+
+            renderUI();
+
+            ImGui::Render();
+            RECT rc; GetClientRect(hwnd, &rc);
+            glViewport(0, 0, rc.right - rc.left, rc.bottom - rc.top);
+            glClearColor(g.darkMode ? 0.08f : 0.95f,
+                         g.darkMode ? 0.08f : 0.95f,
+                         g.darkMode ? 0.10f : 0.97f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+            SwapBuffers(hdc);
+        }
+    } catch (const std::exception&) {
+        // 错误信息已在 failFast 中弹窗提示
     }
 
     // 清理
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplWin32_Shutdown();
-    ImGui::DestroyContext();
-    wglMakeCurrent(nullptr, nullptr);
-    wglDeleteContext(hglrc);
-    ReleaseDC(hwnd, hdc);
-    DestroyWindow(hwnd);
+    if (imguiOpenGLInited) ImGui_ImplOpenGL3_Shutdown();
+    if (imguiWin32Inited) ImGui_ImplWin32_Shutdown();
+    if (imguiContextCreated) ImGui::DestroyContext();
+    if (hglrc) {
+        wglMakeCurrent(nullptr, nullptr);
+        wglDeleteContext(hglrc);
+    }
+    if (hdc && hwnd) ReleaseDC(hwnd, hdc);
+    if (hwnd) DestroyWindow(hwnd);
     delete g.solver;
     return 0;
 }

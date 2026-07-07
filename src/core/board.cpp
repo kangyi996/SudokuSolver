@@ -36,10 +36,7 @@ void Board::setCell(int row, int col, int value) {
     erase(row, col);
     if (value < 1 || value > 9) return;
     grid[row][col] = value;
-    int b = boxIndex(row, col);
-    rowUsed[row][value] = true;
-    colUsed[col][value] = true;
-    boxUsed[b][value] = true;
+    rebuildConstraints();
 }
 
 // 从 grid 完全重建约束表——修复因冲突/擦除可能造成的行列宫占用不一致
@@ -78,11 +75,8 @@ void Board::erase(int row, int col) {
     int value = grid[row][col];
     if (value == 0) return;
 
-    int b = boxIndex(row, col);
     grid[row][col] = 0;
-    rowUsed[row][value] = false;
-    colUsed[col][value] = false;
-    boxUsed[b][value] = false;
+    rebuildConstraints();
 }
 
 // O(1) 检查在 (row,col) 填入 value 是否违反行列宫约束
@@ -128,8 +122,8 @@ void Board::fromString(const std::string& s) {
         if (idx >= 81) break;
         int row = idx / 9, col = idx % 9;
         if (ch >= '1' && ch <= '9') {
-            place(row, col, ch - '0');
-            given[row][col] = true;
+            if (place(row, col, ch - '0'))
+                given[row][col] = true;
         }
         idx++;
     }
